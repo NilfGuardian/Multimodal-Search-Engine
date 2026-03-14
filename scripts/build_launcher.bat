@@ -5,8 +5,9 @@ if not exist ".venv\Scripts\python.exe" (
   echo ERROR: .venv\Scripts\python.exe not found.
   exit /b 1
 )
+.venv\Scripts\python.exe scripts\make_app_icon.py
 .venv\Scripts\python.exe -m pip install pyinstaller
-.venv\Scripts\python.exe -m PyInstaller --onefile --name MultiSearchLauncher scripts\app_launcher.py
+.venv\Scripts\python.exe -m PyInstaller --onefile --name MultiSearchLauncher --icon dist\multisearch_icon.ico scripts\app_launcher.py
 if errorlevel 1 exit /b 1
 echo.
 echo Built: dist\MultiSearchLauncher.exe

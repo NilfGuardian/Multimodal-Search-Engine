@@ -8,10 +8,14 @@ __pycache__/
 
 # Virtual environment
 .venv/
+.runtime_venv/
 
 # Build and packaging artifacts
 build/
-dist/
+dist/*
+!dist/MultiSearchLauncher.exe
+!dist/Start_App.bat
+!dist/multisearch_icon.ico
 *.spec
 
 # Runtime/generated data
