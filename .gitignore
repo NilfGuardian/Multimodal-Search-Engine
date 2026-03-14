@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+
+# Virtual environment
+.venv/
+
+# Build and packaging artifacts
+build/
+dist/
+*.spec
+
+# Runtime/generated data
+vector_store.sqlite3
+milvus_lite.db
+*.log
+
+# Crawled and uploaded content (regenerate via scripts)
+images/*
+!images/.gitkeep
+temp/*
+!temp/.gitkeep
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
