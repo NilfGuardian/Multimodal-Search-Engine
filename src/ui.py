@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import os
+import subprocess
+import sys
+import time
+from pathlib import Path
 from typing import Any, Dict, List
 
 import requests
@@ -15,7 +19,89 @@ st.title("Multimodal Search Engine")
 st.caption("Search images using text or another image, and add new images to the index.")
 
 
+def _backend_is_reachable(timeout: int = 5) -> bool:
+    try:
+        response = requests.get(f"{API_BASE_URL}/stats", timeout=timeout)
+        return response.ok
+    except Exception:
+        return False
+
+
+def _resolve_python_executable(project_root: Path) -> str:
+    venv_python = project_root / ".venv" / "Scripts" / "python.exe"
+    if venv_python.exists():
+        return str(venv_python)
+
+    runtime_python = project_root / ".runtime_venv" / "Scripts" / "python.exe"
+    if runtime_python.exists():
+        return str(runtime_python)
+
+    return sys.executable
+
+
+def _try_start_backend() -> bool:
+    project_root = Path(__file__).resolve().parents[1]
+    python_exe = _resolve_python_executable(project_root)
+
+    creationflags = 0
+    if os.name == "nt":
+        creationflags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
+
+    try:
+        subprocess.Popen(
+            [
+                python_exe,
+                "-m",
+                "uvicorn",
+                "src.api:app",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                "8000",
+            ],
+            cwd=str(project_root),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=creationflags,
+        )
+    except Exception:
+        return False
+
+    for _ in range(20):
+        if _backend_is_reachable(timeout=3):
+            return True
+        time.sleep(0.6)
+
+    return False
+
+
+def _ensure_backend() -> None:
+    if _backend_is_reachable(timeout=3):
+        st.session_state["backend_ready"] = True
+        return
+
+    if not st.session_state.get("backend_start_attempted"):
+        st.session_state["backend_start_attempted"] = True
+        with st.spinner("Backend is offline. Attempting to start it..."):
+            if _try_start_backend():
+                st.session_state["backend_ready"] = True
+                st.success("Backend started successfully.")
+                return
+
+    st.session_state["backend_ready"] = False
+    st.error(
+        "Backend is not reachable at http://127.0.0.1:8000. "
+        "Start it with: python -m uvicorn src.api:app --host 127.0.0.1 --port 8000"
+    )
+
+
+_ensure_backend()
+
+
 def _request_stats() -> int | None:
+    if not st.session_state.get("backend_ready", False):
+        return None
+
     try:
         response = requests.get(f"{API_BASE_URL}/stats", timeout=15)
         response.raise_for_status()
@@ -58,6 +144,10 @@ search_tab, add_tab = st.tabs(["Search", "Add Images"])
 with search_tab:
     st.subheader("Search")
     mode = st.radio("Search type", ["Text", "Image"], horizontal=True)
+
+    if not st.session_state.get("backend_ready", False):
+        st.info("Backend is offline. Start backend first, then run search.")
+        st.stop()
 
     if mode == "Text":
         text_query = st.text_input("Enter text query", placeholder="example: red sports car")
@@ -113,6 +203,11 @@ with search_tab:
 
 with add_tab:
     st.subheader("Add Images")
+
+    if not st.session_state.get("backend_ready", False):
+        st.info("Backend is offline. Start backend first, then index images.")
+        st.stop()
+
     uploads = st.file_uploader(
         "Upload one or more images",
         type=["jpg", "jpeg", "png"],
