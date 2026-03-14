@@ -11,6 +11,7 @@ import hashlib
 import os
 import subprocess
 import sys
+import threading
 import time
 import webbrowser
 from pathlib import Path
@@ -151,6 +152,12 @@ def _post_index_local(timeout_seconds: int = 300) -> None:
         return
 
 
+def _post_index_local_async() -> None:
+    """Trigger local indexing without blocking app startup."""
+    worker = threading.Thread(target=_post_index_local, kwargs={"timeout_seconds": 1800}, daemon=True)
+    worker.start()
+
+
 def _free_port_windows(port: int) -> None:
     """Kill process listening on a port (Windows-only best effort)."""
     if os.name != "nt":
@@ -199,6 +206,19 @@ def _terminate(proc: Optional[subprocess.Popen[bytes]]) -> None:
         proc.kill()
 
 
+def _wait_until_stopped(
+    backend: Optional[subprocess.Popen[bytes]],
+    frontend: Optional[subprocess.Popen[bytes]],
+) -> None:
+    """Keep launcher alive in non-interactive mode until app processes stop."""
+    while True:
+        backend_dead = backend is None or backend.poll() is not None
+        frontend_dead = frontend is None or frontend.poll() is not None
+        if backend_dead or frontend_dead:
+            return
+        time.sleep(1)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Launch Multimodal Search Engine desktop app")
     parser.add_argument("--no-browser", action="store_true", help="Do not auto-open browser")
@@ -242,7 +262,8 @@ def main() -> int:
             print("Backend did not become ready in time.")
             return 1
 
-        _post_index_local(timeout_seconds=1800)
+        if os.environ.get("AUTO_INDEX_ON_LAUNCH", "0") == "1":
+            _post_index_local_async()
 
         frontend = subprocess.Popen(
             [python_exe, "-m", "streamlit", "run", "src/ui.py", "--server.port", "8501"],
@@ -266,7 +287,8 @@ def main() -> int:
             print(f"Auto-stop enabled: {args.auto_stop}s")
             time.sleep(args.auto_stop)
         else:
-            input("Press Enter to stop application...\n")
+            print("Application is running. Close launcher window/process to stop.")
+            _wait_until_stopped(backend, frontend)
 
         return 0
     except KeyboardInterrupt:
